@@ -5,49 +5,45 @@
 
 import argparse
 import logging
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 from random import randint
-
-def load_sequence(file):
-    logging.debug(f"Loading sequence from {file}")
-    name = ''
-    seq  = ''
-    with open(file, "rt") as fh:
-        for line in fh:
-            if line.startswith(">"):
-                name = line.rstrip()
-            else:
-                seq = seq + line.rstrip().upper()
-    logging.debug("Read " + str(len(seq)) + " bases")
-    return name, seq
 
 def mutate(base):
     if base == 'A':
-        opt = ['C', 'G', 'T', 'T']
+        opt = ['c', 'g', 't', 't']
     elif base == 'T':
-        opt = ['C', 'G', 'A', 'A']
+        opt = ['c', 'g', 'a', 'a']
     elif base == 'C':
-        opt = ['A', 'T', 'G', 'G']
+        opt = ['a', 't', 'g', 'g']
     elif base == 'G':
-        opt = ['A', 'T', 'C', 'C']
+        opt = ['a', 't', 'c', 'c']
     else:
-        opt = ['A', 'T', 'C', 'G']
+        opt = ['a', 't', 'g', 'c']
     return opt[ randint(0,3) ]
 
 def add_mutations(seq, mut):
     logging.debug(f"Adding {mut} mutations")
     aseq = list(seq)
-    for n in range(mut):
+    n = 0
+    mutated = ['a', 'c', 'g', 't']
+    while True:
         pos = randint(0, len(aseq) -1)
         old = aseq[pos]
+        
+        if old in mutated: # skip already mutated positions
+            continue
+
         new = mutate(base=old)
         logging.debug(f"  iter {n}: changing {pos} ({old} -> {new})")
         aseq[pos] = new
-    return ''.join(aseq)
+        n += 1
 
-def write_seq(name, seq, file):
-    with open(file, "wt") as fh:
-        fh.write(name + "\n" + seq + "\n")
-        
+        if n == mut:
+            break
+
+    return ''.join(aseq)
 
 def main():
     rate = 0.01
@@ -64,12 +60,18 @@ def main():
     if args.rate:
         rate = args.rate
 
-    seq_name, seq = load_sequence(file=args.fasta)
-    mutations = int(rate * len(seq))
-    logging.debug(f"Total mutations = {mutations} with rate = {rate}")
-    seq_mut = add_mutations(seq=seq, mut=mutations)
-    write_seq(name=seq_name, seq=seq_mut, file=args.output)
-
+    with open(args.fasta) as input_fh, open(args.output, "w") as output_fh:
+        for record in SeqIO.parse(input_fh, "fasta"):
+            mutations = int(rate * len(record.seq))
+            mut_seq = add_mutations(seq=record.seq, mut=mutations)
+            mut_record = SeqRecord(
+                            Seq(mut_seq),
+                            id=record.id,
+                            name=record.name,
+                            description=record.description + f" MUT_RATE={rate}",
+                        )
+            SeqIO.write(mut_record, output_fh, "fasta")
+    
     logging.debug("Completed")
 
 if __name__ == "__main__":
